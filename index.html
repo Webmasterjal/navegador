@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Navegador GPS 3D Pro - Jal</title>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
+    <style>
+        * { box-sizing: border-box; }
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #1a1a1a; color: #ffffff;
+        }
+        #map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        
+        #top-container {
+            position: absolute; top: 12px; left: 12px; right: 12px;
+            display: flex; flex-direction: column; gap: 8px; z-index: 10;
+            transition: transform 0.4s ease, opacity 0.4s ease;
+        }
+
+        .nav-active #top-container {
+            opacity: 0; pointer-events: none; transform: translateY(-100px);
+        }
+
+        .search-bar-row { display: flex; gap: 8px; width: 100%; align-items: center; }
+
+        .search-box-wrapper { position: relative; flex-grow: 1; }
+        .search-input {
+            width: 100%; background-color: rgba(25, 25, 25, 0.95);
+            border: 2px solid #555; border-radius: 12px; padding: 14px 15px 14px 45px;
+            color: #ffffff; font-size: 16px; outline: none; box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+        }
+        .search-icon { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); font-size: 18px; }
+
+        /* BOTONES RÁPIDOS SUPERIORES */
+        .quick-btn {
+            background: rgba(30,30,30,0.95); border: 2px solid #555; color: white;
+            padding: 12px; border-radius: 12px; cursor: pointer; font-size: 18px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .quick-btn:active { background: #444; }
+
+        /* PANEL DESPLEGABLE DE HISTORIAL */
+        #history-dropdown {
+            display: none; position: absolute; top: 100%; left: 0; right: 0;
+            background: rgba(25, 25, 25, 0.98); border: 2px solid #555; border-radius: 12px;
+            margin-top: 6px; max-height: 220px; overflow-y: auto; z-index: 110; box-shadow: 0 6px 20px rgba(0,0,0,0.8);
+        }
+        .history-item {
+            padding: 12px 15px; border-bottom: 1px solid #333; font-size: 13px; cursor: pointer; color: #fff;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .history-item:hover { background: #333; }
+
+        /* BANNERS FLOTANTES */
+        #toll-alert-banner {
+            position: absolute; top: 75px; left: 15px; right: 15px;
+            background: linear-gradient(135deg, #d35400 0%, #e67e22 100%);
+            border: 2px solid #f1c40f; border-radius: 12px; padding: 10px 14px;
+            display: none; justify-content: space-between; align-items: center; z-index: 22;
+            box-shadow: 0 4px 15px rgba(211, 84, 0, 0.6); font-size: 13px; font-weight: bold;
+        }
+
+        #poi-alert-banner {
+            position: absolute; top: 75px; left: 15px; right: 15px;
+            background: linear-gradient(135deg, #2980b9 0%, #3498db 100%);
+            border: 2px solid #f1c40f; border-radius: 12px; padding: 10px 14px;
+            display: none; justify-content: space-between; align-items: center; z-index: 23;
+            box-shadow: 0 4px 15px rgba(41, 128, 185, 0.6); font-size: 13px; font-weight: bold;
+        }
+
+        #radar-alert-banner {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+            border: 3px solid #f1c40f; border-radius: 14px; padding: 12px 16px;
+            display: none; align-items: center; justify-content: space-between; z-index: 25;
+            box-shadow: 0 6px 25px rgba(231, 76, 60, 0.7);
+        }
+        .radar-alert-left { display: flex; align-items: center; gap: 12px; }
+        .radar-alert-icon { font-size: 32px; background: rgba(0,0,0,0.3); padding: 6px 10px; border-radius: 10px; }
+        .radar-alert-text { display: flex; flex-direction: column; }
+        .radar-alert-title { font-size: 15px; font-weight: 900; color: #fff; text-transform: uppercase; }
+        .radar-alert-sub { font-size: 12px; color: #f1c40f; font-weight: bold; }
+        .radar-speed-limit-badge {
+            background: #ffffff; color: #c0392b; border: 3px solid #c0392b;
+            border-radius: 50%; width: 50px; height: 50px; display: flex;
+            align-items: center; justify-content: center; font-weight: 900; font-size: 16px; flex-shrink: 0;
+        }
+
+        /* BOTÓN DE INICIAR NAVEGACIÓN */
+        #start-nav-btn {
+            position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%);
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            color: white; border: 2px solid #f1c40f; border-radius: 30px;
+            padding: 14px 28px; font-size: 16px; font-weight: bold;
+            box-shadow: 0 6px 20px rgba(39, 174, 96, 0.8); z-index: 20; display: none; cursor: pointer;
+        }
+
+        /* PANEL INFERIOR */
+        #trip-info-panel {
+            position: absolute; bottom: 20px; left: 15px; right: 15px;
+            background: rgba(20, 20, 20, 0.95); border: 2px solid #444;
+            border-radius: 14px; padding: 12px; display: none;
+            justify-content: space-around; align-items: center; z-index: 10;
+            box-shadow: 0 6px 25px rgba(0,0,0,0.8);
+        }
+        .next-turn-stat { display: flex; align-items: center; gap: 10px; max-width: 45%; }
+        .turn-icon { font-size: 28px; color: #00ff88; }
+        .turn-details { display: flex; flex-direction: column; }
+        .turn-dist { font-size: 14px; font-weight: bold; color: #00d2ff; }
+        .turn-text { font-size: 11px; color: #eee; line-height: 1.2; word-break: break-word; }
+
+        .trip-stat { display: flex; flex-direction: column; align-items: center; }
+        .trip-val { font-size: 16px; font-weight: bold; color: #fff; }
+        .trip-label { font-size: 10px; color: #aaa; text-transform: uppercase; margin-top: 2px; }
+
+        /* VELOCÍMETRO */
+        #speed-panel {
+            position: absolute; bottom: 105px; left: 15px;
+            background: rgba(20, 20, 20, 0.95); border: 3px solid #ffcc00;
+            border-radius: 50%; width: 72px; height: 72px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6); z-index: 20;
+        }
+        .speed-val { font-size: 20px; font-weight: bold; color: #fff; line-height: 1; }
+        .speed-unit { font-size: 9px; color: #ffcc00; text-transform: uppercase; font-weight: bold; margin-top: 2px; }
+
+        .radar-pin {
+            background: #e74c3c; border: 2px solid #fff; border-radius: 8px;
+            padding: 2px 6px; font-size: 11px; font-weight: bold; color: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.6); display: flex; align-items: center; gap: 3px; white-space: nowrap;
+        }
+        .radar-pin.fijo { background: #e74c3c; }
+        .radar-pin.tramo { background: #e67e22; }
+        .radar-pin.semaforo { background: #9b59b6; }
+        .radar-pin.movil { background: #f1c40f; color: #000; }
+
+        /* FLECHA DE NAVEGACIÓN PROFESIONAL */
+        .user-nav-arrow {
+            width: 44px; height: 44px;
+            display: flex; align-items: center; justify-content: center;
+            filter: drop-shadow(0px 4px 8px rgba(0,0,0,0.8));
+            transition: transform 0.4s ease;
+        }
+
+        /* CONFIGURACIÓN MODAL */
+        #config-modal {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85); z-index: 30; display: none;
+            justify-content: center; align-items: center; padding: 10px;
+        }
+        .config-card {
+            background: #222; border: 2px solid #555; border-radius: 14px;
+            padding: 16px; width: 100%; max-width: 350px; display: flex; flex-direction: column; gap: 10px;
+            max-height: 90vh; overflow-y: auto;
+        }
+        .config-item { background: #2c2c2c; padding: 8px 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 6px; }
+        .config-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: bold; }
+
+        #config-btn {
+            position: absolute; top: 15px; right: 15px; background: rgba(30,30,30,0.9);
+            border: 1px solid #666; color: white; padding: 10px 12px; border-radius: 50px;
+            z-index: 15; cursor: pointer; font-size: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        #recenter-btn {
+            position: absolute; bottom: 105px; right: 15px;
+            background: #2980b9; color: white; border: none;
+            padding: 10px 14px; border-radius: 50px; font-weight: bold; font-size: 12px;
+            z-index: 20; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: flex;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="config-btn">⚙️</button>
+
+    <div id="top-container">
+        <div class="search-bar-row">
+            <div class="search-box-wrapper">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="destination-input" class="search-input" placeholder="Buscar dirección (ej. Móstoles)..." oninput="buscarSugerencias(this.value)" onkeypress="handleSearchKey(event)">
+                <div id="search-results-list" style="display:none; position:absolute; top:100%; left:0; right:0; background:#222; border:1px solid #555; border-radius:10px; margin-top:5px; max-height:200px; overflow-y:auto; z-index:100; box-shadow:0 6px 15px rgba(0,0,0,0.7);"></div>
+            </div>
+            <button class="quick-btn" onclick="irACasa()" title="Ir a Casa">🏠</button>
+            <button class="quick-btn" onclick="toggleHistorial()" title="Últimos destinos">🕒</button>
+        </div>
+
+        <div id="history-dropdown"></div>
+    </div>
+
+    <div id="toll-alert-banner">
+        <span id="toll-info-text">⚠️ Ruta con Peaje detectada</span>
+        <button onclick="evitarPeajesYRecalcular()" style="background:#c0392b; color:white; border:none; padding:5px 10px; border-radius:6px; font-weight:bold; cursor:pointer;">Evitar</button>
+    </div>
+
+    <div id="poi-alert-banner">
+        <span id="poi-alert-text">⛽ Gasolinera Cepsa a 3.2 km en tu ruta</span>
+        <button onclick="ocultarBannerPoi()" style="background:#1b4f72; color:white; border:none; padding:4px 8px; border-radius:6px; font-weight:bold; cursor:pointer;">OK</button>
+    </div>
+
+    <div id="radar-alert-banner">
+        <div class="radar-alert-left">
+            <span class="radar-alert-icon" id="radar-banner-icon">📷</span>
+            <div class="radar-alert-text">
+                <span class="radar-alert-title" id="radar-banner-title">Radar Fijo</span>
+                <span class="radar-alert-sub" id="radar-banner-dist">a 800 metros</span>
+            </div>
+        </div>
+        <div class="radar-speed-limit-badge" id="radar-banner-speed">120</div>
+    </div>
+
+    <div id="config-modal">
+        <div class="config-card">
+            <h3 style="margin:0 0 5px 0; color:#00d2ff; text-align:center;">⚙️ Configuración del Viaje</h3>
+            
+            <div class="config-item">
+                <div class="config-row" style="color:#2ecc71;"><span>🚗 Modo de Desplazamiento</span></div>
+                <div class="config-row" style="font-size:11px; color:#aaa;">
+                    <span>Modo:</span>
+                    <select id="select-modo-transporte" onchange="cambiarModoTransporteConfig()" style="background:#333;color:#fff;border:1px solid #666;padding:4px;border-radius:4px; width: 150px;">
+                        <option value="driving" selected>🚗 Coche</option>
+                        <option value="walking">🚶 A pie</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="config-item">
+                <div class="config-row" style="color:#00d2ff;"><span>🛡️ Preferencias de Ruta</span></div>
+                <div class="config-row">
+                    <span>🛣️ Evitar Peajes</span>
+                    <input type="checkbox" id="avoid-tolls-check" onchange="actualizarFiltrosRuta()">
+                </div>
+                <div class="config-row">
+                    <span>🚢 Evitar Ferries</span>
+                    <input type="checkbox" id="avoid-ferry-check" onchange="actualizarFiltrosRuta()">
+                </div>
+                <div class="config-row">
+                    <span>🛤️ Sin Carreteras sin Asfaltar</span>
+                    <input type="checkbox" id="avoid-unpaved-check" onchange="actualizarFiltrosRuta()">
+                </div>
+            </div>
+
+            <h4 style="margin:8px 0 2px 0; color:#00d2ff; font-size:13px;">Antelación y Avisos de Radares</h4>
+            
+            <div class="config-item">
+                <div class="config-row">
+                    <span>📷 Radar Fijo</span>
+                    <input type="checkbox" id="check-radar-fijo" checked onchange="renderizarRadaresEnMapa()">
+                </div>
+                <div class="config-row" style="font-size:11px; color:#aaa;">
+                    <span>Antelación:</span>
+                    <select id="dist-fijo" style="background:#333;color:#fff;border:1px solid #666;padding:2px;border-radius:4px;">
+                        <option value="500">500 m</option>
+                        <option value="1000">1000 m (1 km)</option>
+                        <option value="1500" selected>1500 m (1.5 km)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="config-item">
+                <div class="config-row">
+                    <span>⏱️ Radar de Tramo</span>
+                    <input type="checkbox" id="check-radar-tramo" checked onchange="renderizarRadaresEnMapa()">
+                </div>
+                <div class="config-row" style="font-size:11px; color:#aaa;">
+                    <span>Antelación:</span>
+                    <select id="dist-tramo" style="background:#333;color:#fff;border:1px solid #666;padding:2px;border-radius:4px;">
+                        <option value="500">500 m</option>
+                        <option value="1000">1000 m (1 km)</option>
+                        <option value="1500" selected>1500 m (1.5 km)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="config-item">
+                <div class="config-row">
+                    <span>🚦 Cámara Semáforo</span>
+                    <input type="checkbox" id="check-radar-semaforo" checked onchange="renderizarRadaresEnMapa()">
+                </div>
+                <div class="config-row" style="font-size:11px; color:#aaa;">
+                    <span>Antelación:</span>
+                    <select id="dist-semaforo" style="background:#333;color:#fff;border:1px solid #666;padding:2px;border-radius:4px;">
+                        <option value="150" selected>150 m</option>
+                        <option value="300">300 m</option>
+                        <option value="500">500 m</option>
+                    </select>
+                </div>
+            </div>
+
+            <button onclick="cerrarConfiguracion()" style="background:#27ae60;color:white;border:none;padding:10px;border-radius:8px;font-weight:bold;margin-top:5px;cursor:pointer;">Guardar y Cerrar</button>
+        </div>
+    </div>
+
+    <button id="start-nav-btn" onclick="iniciarNavegacionReal()">▶️ Iniciar Navegación</button>
+    <button id="recenter-btn" onclick="centrarEnMiUbicacion()">🎯 Centrar</button>
+
+    <div id="map"></div>
+
+    <div id="speed-panel">
+        <span class="speed-val" id="current-speed">0</span>
+        <span class="speed-unit">km/h</span>
+    </div>
+
+    <div id="trip-info-panel">
+        <div class="next-turn-stat">
+            <span class="turn-icon" id="turn-icon">⬆️</span>
+            <div class="turn-details">
+                <span class="turn-dist" id="turn-dist">en 200 m</span>
+                <span class="turn-text" id="turn-text">Continúe recto</span>
+            </div>
+        </div>
+        <div class="trip-stat"><span class="trip-val" id="time-left">0 min</span><span class="trip-label">Restante</span></div>
+        <div class="trip-stat"><span class="trip-val" id="arrival-time" style="color: #27ae60;">--:--</span><span class="trip-label">Llegada</span></div>
+        <div class="trip-stat"><span class="trip-val" id="distance-left">0 km</span><span class="trip-label">Distancia</span></div>
+    </div>
+
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js'></script>
+    <script src="poi-service.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
